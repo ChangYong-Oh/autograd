@@ -221,8 +221,33 @@ def grad_np_mean(g, ans, vs, gvs, x, axis=None, keepdims=False):
 anp.mean.defvjp(grad_np_mean)
 
 def grad_np_prod(g, ans, vs, gvs, x, axis=None, keepdims=False): # TODO: Support tuples of axes.
-    g_repeated, _ = repeat_to_match_shape(g * ans, vs, axis, keepdims)
-    return g_repeated / x
+        if axis is None:
+        n_zero = (x==0).sum()
+        if n_zero > 1:
+            return anp.zeros(x.shape)
+        elif n_zero == 1:
+            result = anp.zeros(x.shape)
+            aux_x = x.value.copy()
+            aux_x[x==0] = 1.0
+            result[x==0] = anp.prod(aux_x)
+            return result
+        else:
+            g_repeated, _ = repeat_to_match_shape(g * ans, vs, axis, keepdims)
+            return g_repeated / x
+    else:
+        g_repeated, _ = repeat_to_match_shape(g * ans, vs, axis, keepdims)
+        result = anp.zeros(x.shape)
+        non_zero_ind = x!=0
+        result[non_zero_ind] = g_repeated[non_zero_ind] / x[non_zero_ind]
+        n_zero = (x == 0).sum(axis=axis, keepdims=True)
+        if isinstance(axis, int):
+            axis = (axis, )
+        one_zero = anp.tile(n_zero==1, [(x.shape[d] if d in axis else 1) for d in range(x.ndim)])
+        one_zero_ind = anp.logical_and(x==0, one_zero)
+        aux_x = x.value.copy()
+        aux_x[one_zero_ind] = 1.0
+        result[one_zero_ind] = (aux_x.prod(axis=axis)*g)[anp.where(n_zero.squeeze(axis=axis)==1)]
+        return result
 anp.prod.defvjp(grad_np_prod)
 
 def grad_np_var(g, ans, vs, gvs, x, axis=None, ddof=0, keepdims=False):
